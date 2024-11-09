@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Game</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #222; color: #fff; font-family: Arial, sans-serif; }
+        canvas { border: 3px solid #fff; background: #eee; }
+    </style>
+</head>
+<body>
+    <canvas id="mazeCanvas" width="500" height="500"></canvas>
+    <script>
+        const canvas = document.getElementById("mazeCanvas");
+        const ctx = canvas.getContext("2d");
+        const cellSize = 25;
+        const rows = 20;
+        const cols = 20;
+        const maze = [];
+        let player = { x: 0, y: 0, targetX: 0, targetY: 0 };
+        let goal = { x: cols - 1, y: rows - 1 };
+        let obstacles = [];
+        let difficulty = 1;
+
+        function initMaze() {
+            for (let y = 0; y < rows; y++) {
+                maze[y] = [];
+                for (let x = 0; x < cols; x++) {
+                    maze[y][x] = { top: true, right: true, bottom: true, left: true, visited: false };
+                }
+            }
+            generateMaze(0, 0);
+            drawMaze();
+            drawPlayer();
+        }
+
+        function generateMaze(x, y) {
+            maze[y][x].visited = true;
+            const directions = ["top", "right", "bottom", "left"].sort(() => Math.random() - 0.5);
+
+            for (const direction of directions) {
+                const nx = direction === "right" ? x + 1 : direction === "left" ? x - 1 : x;
+                const ny = direction === "bottom" ? y + 1 : direction === "top" ? y - 1 : y;
+
+                if (nx >= 0 && ny >= 0 && nx < cols && ny < rows && !maze[ny][nx].visited) {
+                    if (direction === "top") maze[y][x].top = maze[ny][nx].bottom = false;
+                    if (direction === "right") maze[y][x].right = maze[ny][nx].left = false;
+                    if (direction === "bottom") maze[y][x].bottom = maze[ny][nx].top = false;
+                    if (direction === "left") maze[y][x].left = maze[ny][nx].right = false;
+
+                    generateMaze(nx, ny);
+                }
+            }
+        }
+
+        function drawMaze() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#000";
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const cell = maze[y][x];
+                    const x1 = x * cellSize;
+                    const y1 = y * cellSize;
+                    if (cell.top) drawLine(x1, y1, x1 + cellSize, y1);
+                    if (cell.right) drawLine(x1 + cellSize, y1, x1 + cellSize, y1 + cellSize);
+                    if (cell.bottom) drawLine(x1, y1 + cellSize, x1 + cellSize, y1 + cellSize);
+                    if (cell.left) drawLine(x1, y1, x1, y1 + cellSize);
+                }
+            }
+            drawGoal();
+            drawObstacles();
+        }
+
+        function drawLine(x1, y1, x2, y2) {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        function drawPlayer() {
+            const px = player.x * cellSize + cellSize / 2;
+            const py = player.y * cellSize + cellSize / 2;
+
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            ctx.moveTo(px, py - 8); // top triangle vertex
+            ctx.lineTo(px - 8, py + 8); // bottom left
+            ctx.lineTo(px + 8, py + 8); // bottom right
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = "#F00";
+            ctx.beginPath();
+            ctx.moveTo(px, py - 4); // red top vertex
+            ctx.lineTo(px - 4, py + 4); // red bottom left
+            ctx.lineTo(px + 4, py + 4); // red bottom right
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawGoal() {
+            ctx.fillStyle = "#FFD700";
+            ctx.fillRect(goal.x * cellSize + 2, goal.y * cellSize + 2, cellSize - 4, cellSize - 4);
+        }
+
+        function drawObstacles() {
+            ctx.fillStyle = "#F44336";
+            for (const obs of obstacles) {
+                ctx.fillRect(obs.x * cellSize + 2, obs.y * cellSize + 2, cellSize - 4, cellSize - 4);
+            }
+        }
+
+        function addObstacles() {
+            obstacles = [];
+            for (let i = 0; i < difficulty; i++) {
+                const ox = Math.floor(Math.random() * cols);
+                const oy = Math.floor(Math.random() * rows);
+                if ((ox !== player.x || oy !== player.y) && (ox !== goal.x || oy !== goal.y)) {
+                    obstacles.push({ x: ox, y: oy });
+                }
+            }
+            drawMaze();
+            drawPlayer();
+        }
+
+        function movePlayer(dx, dy) {
+            const newX = player.targetX + dx;
+            const newY = player.targetY + dy;
+            if (newX >= 0 && newY >= 0 && newX < cols && newY < rows) {
+                const cell = maze[player.targetY][player.targetX];
+                if ((dx === 1 && !cell.right) || (dx === -1 && !cell.left) || (dy === 1 && !cell.bottom) || (dy === -1 && !cell.top)) {
+                    if (!obstacles.some(o => o.x === newX && o.y === newY)) {
+                        player.targetX = newX;
+                        player.targetY = newY;
+                        if (player.targetX === goal.x && player.targetY === goal.y) {
+                            difficulty++;
+                            alert("Level up!");
+                            player = { x: 0, y: 0, targetX: 0, targetY: 0 };
+                            addObstacles();
+                        }
+                    }
+                }
+            }
+        }
+
+        function animatePlayer() {
+            player.x += (player.targetX - player.x) * 0.1;
+            player.y += (player.targetY - player.y) * 0.1;
+            drawMaze();
+            drawPlayer();
+            requestAnimationFrame(animatePlayer);
+        }
+
+        document.addEventListener("keydown", (e) => {
+            switch (e.key) {
+                case "ArrowUp": movePlayer(0, -1); break;
+                case "ArrowDown": movePlayer(0, 1); break;
+                case "ArrowLeft": movePlayer(-1, 0); break;
+                case "ArrowRight": movePlayer(1, 0); break;
+            }
+        });
+
+        setInterval(addObstacles, 5000);
+        initMaze();
+        animatePlayer();
+    </script>
+</body>
+</html>
