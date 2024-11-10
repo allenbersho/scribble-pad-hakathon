@@ -18,10 +18,15 @@
         const rows = 20;
         const cols = 20;
         const maze = [];
-        let player = { x: 0, y: 0, targetX: 0, targetY: 0 };
+        let player = { x: 0, y: 0, targetX: 0, targetY: 0, speed: 0.1 };
         let goal = { x: cols - 1, y: rows - 1 };
-        let obstacles = [];
-        let difficulty = 1;
+        let level = 1;
+        let timer = null;
+        let timeInterval = 5000; // Initial 5 seconds interval for maze change
+        let powerUps = [];
+        let powerUpDuration = 5000; // Power-up effect lasts for 5 seconds
+        let freezeTimer = false;
+        let speedBoostActive = false;
 
         function initMaze() {
             for (let y = 0; y < rows; y++) {
@@ -33,6 +38,7 @@
             generateMaze(0, 0);
             drawMaze();
             drawPlayer();
+            addPowerUps();
         }
 
         function generateMaze(x, y) {
@@ -70,7 +76,7 @@
                 }
             }
             drawGoal();
-            drawObstacles();
+            drawPowerUps();
         }
 
         function drawLine(x1, y1, x2, y2) {
@@ -84,46 +90,45 @@
             const px = player.x * cellSize + cellSize / 2;
             const py = player.y * cellSize + cellSize / 2;
 
-            ctx.fillStyle = "#000";
-            ctx.beginPath();
-            ctx.moveTo(px, py - 8); // top triangle vertex
-            ctx.lineTo(px - 8, py + 8); // bottom left
-            ctx.lineTo(px + 8, py + 8); // bottom right
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.fillStyle = "#F00";
-            ctx.beginPath();
-            ctx.moveTo(px, py - 4); // red top vertex
-            ctx.lineTo(px - 4, py + 4); // red bottom left
-            ctx.lineTo(px + 4, py + 4); // red bottom right
-            ctx.closePath();
-            ctx.fill();
+            ctx.font = `${cellSize - 6}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("🚶‍♂️", px, py);
         }
 
         function drawGoal() {
-            ctx.fillStyle = "#FFD700";
-            ctx.fillRect(goal.x * cellSize + 2, goal.y * cellSize + 2, cellSize - 4, cellSize - 4);
+            const gx = goal.x * cellSize + cellSize / 2;
+            const gy = goal.y * cellSize + cellSize / 2;
+
+            ctx.font = `${cellSize - 6}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("🚪", gx, gy);
         }
 
-        function drawObstacles() {
-            ctx.fillStyle = "#F44336";
-            for (const obs of obstacles) {
-                ctx.fillRect(obs.x * cellSize + 2, obs.y * cellSize + 2, cellSize - 4, cellSize - 4);
-            }
-        }
-
-        function addObstacles() {
-            obstacles = [];
-            for (let i = 0; i < difficulty; i++) {
-                const ox = Math.floor(Math.random() * cols);
-                const oy = Math.floor(Math.random() * rows);
-                if ((ox !== player.x || oy !== player.y) && (ox !== goal.x || oy !== goal.y)) {
-                    obstacles.push({ x: ox, y: oy });
+        function addPowerUps() {
+            powerUps = [];
+            const powerUpTypes = ["🕒", "⚡"];
+            for (let i = 0; i < 2; i++) {
+                const type = powerUpTypes[i];
+                const px = Math.floor(Math.random() * cols);
+                const py = Math.floor(Math.random() * rows);
+                if ((px !== player.x || py !== player.y) && (px !== goal.x || py !== goal.y)) {
+                    powerUps.push({ x: px, y: py, type: type });
                 }
             }
             drawMaze();
-            drawPlayer();
+        }
+
+        function drawPowerUps() {
+            ctx.font = `${cellSize - 6}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            for (const powerUp of powerUps) {
+                const px = powerUp.x * cellSize + cellSize / 2;
+                const py = powerUp.y * cellSize + cellSize / 2;
+                ctx.fillText(powerUp.type, px, py);
+            }
         }
 
         function movePlayer(dx, dy) {
@@ -132,26 +137,80 @@
             if (newX >= 0 && newY >= 0 && newX < cols && newY < rows) {
                 const cell = maze[player.targetY][player.targetX];
                 if ((dx === 1 && !cell.right) || (dx === -1 && !cell.left) || (dy === 1 && !cell.bottom) || (dy === -1 && !cell.top)) {
-                    if (!obstacles.some(o => o.x === newX && o.y === newY)) {
-                        player.targetX = newX;
-                        player.targetY = newY;
-                        if (player.targetX === goal.x && player.targetY === goal.y) {
-                            difficulty++;
-                            alert("Level up!");
-                            player = { x: 0, y: 0, targetX: 0, targetY: 0 };
-                            addObstacles();
-                        }
+                    player.targetX = newX;
+                    player.targetY = newY;
+                    checkPowerUpCollision();
+                    if (player.targetX === goal.x && player.targetY === goal.y) {
+                        levelUp();
                     }
                 }
             }
         }
 
+        function checkPowerUpCollision() {
+            const powerUp = powerUps.find(p => p.x === player.targetX && p.y === player.targetY);
+            if (powerUp) {
+                if (powerUp.type === "🕒") {
+                    activateTimeFreeze();
+                } else if (powerUp.type === "⚡") {
+                    activateSpeedBoost();
+                }
+                powerUps = powerUps.filter(p => p !== powerUp); // Remove the collected power-up
+                drawMaze();
+            }
+        }
+
+        function activateTimeFreeze() {
+            freezeTimer = true;
+            clearTimeout(freezeTimerTimeout);
+            const freezeTimerTimeout = setTimeout(() => {
+                freezeTimer = false;
+                resetMazeTimer(); // Resume maze changes after freeze
+            }, powerUpDuration);
+        }
+
+        function activateSpeedBoost() {
+            speedBoostActive = true;
+            player.speed = 0.3; // Increase player speed
+            clearTimeout(speedBoostTimeout);
+            const speedBoostTimeout = setTimeout(() => {
+                speedBoostActive = false;
+                player.speed = 0.1; // Reset player speed
+            }, powerUpDuration);
+        }
+
         function animatePlayer() {
-            player.x += (player.targetX - player.x) * 0.1;
-            player.y += (player.targetY - player.y) * 0.1;
+            player.x += (player.targetX - player.x) * player.speed;
+            player.y += (player.targetY - player.y) * player.speed;
             drawMaze();
             drawPlayer();
             requestAnimationFrame(animatePlayer);
+        }
+
+        function levelUp() {
+            level++;
+            if (level > 5) {
+                alert("Congratulations! You have completed all levels!");
+                return;
+            }
+            timeInterval = Math.max(1000, timeInterval - 1000); // Reduce time interval with each level, minimum 1 second
+            alert(`Level up! Level: ${level}`);
+            player = { x: 0, y: 0, targetX: 0, targetY: 0, speed: 0.1 };
+            resetMazeTimer();
+            addPowerUps();
+        }
+
+        function resetMazeTimer() {
+            if (timer) {
+                clearInterval(timer);
+            }
+            initMaze();
+            if (!freezeTimer) {
+                timer = setInterval(() => {
+                    initMaze();
+                    addPowerUps(); // Add new power-ups when maze regenerates
+                }, timeInterval);
+            }
         }
 
         document.addEventListener("keydown", (e) => {
@@ -163,9 +222,9 @@
             }
         });
 
-        setInterval(addObstacles, 5000);
         initMaze();
         animatePlayer();
+        resetMazeTimer();
     </script>
 </body>
 </html>
